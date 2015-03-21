@@ -285,43 +285,36 @@ print(script_df)
 
 # Create new features that help diagnostics
 #   Convert factors to dummy variables
-#   Potential Enhancements:
-#       One code chunk to cycle thru glb_entity_df & glb_predct_df ?
-#           Use with / within ?
-#           for (df in c(glb_entity_df, glb_predct_df)) cycles thru column names
-#           for (df in list(glb_entity_df, glb_predct_df)) does not change the actual dataframes
-#
-#       Build splines   require(splines); bsBasis <- bs(training$age, df=3)
+#   Build splines   require(splines); bsBasis <- bs(training$age, df=3)
 
-glb_entity_df <- mutate(glb_entity_df,
-#     <col_name>.NA=is.na(<col_name>)
-    Team.fctr=factor(Team, 
-                as.factor(union(glb_entity_df$Team, glb_predct_df$Team))) 
-#     <col_name>.fctr_num=grep(<col_name>, levels(<col_name>.fctr)), # This doesn't work
-#     
-#     Date.my=as.Date(strptime(Date, "%m/%d/%y %H:%M")),
-#     Year=year(Date.my),
-#     Month=months(Date.my),
-#     Weekday=weekdays(Date.my)
-#     
-                    )
-# 
-# If levels of a factor are different across glb_entity_df & glb_predct_df; predict.glm fails  
-# Transformations not handled by mutate
-glb_entity_df$Team.fctr.num <- sapply(1:nrow(glb_entity_df), 
-    function(row_ix) grep(glb_entity_df[row_ix, "Team"],
-                          levels(glb_entity_df[row_ix, "Team.fctr"])))
+add_new_diag_feats <- function(obs_df) {
+    obs_df <- mutate(obs_df,
+#         <col_name>.NA=is.na(<col_name>)
+        Team.fctr=factor(Team, 
+                    as.factor(union(obs_df$Team, glb_predct_df$Team))) 
 
-glb_predct_df <- mutate(glb_predct_df, 
-    Team.fctr=factor(Team, 
-                as.factor(union(glb_entity_df$Team, glb_predct_df$Team))) 
-                    )
+          # This doesn't work - use sapply instead
+#         <col_name>.fctr_num=grep(<col_name>, levels(<col_name>.fctr)), 
+#         
+#         Date.my=as.Date(strptime(Date, "%m/%d/%y %H:%M")),
+#         Year=year(Date.my),
+#         Month=months(Date.my),
+#         Weekday=weekdays(Date.my)
+        
+                        )
 
-glb_predct_df$Team.fctr.num <- sapply(1:nrow(glb_predct_df), 
-    function(row_ix) grep(glb_predct_df[row_ix, "Team"],
-                          levels(glb_predct_df[row_ix, "Team.fctr"])))
+    # If levels of a factor are different across obs_df & glb_predct_df; predict.glm fails  
+    # Transformations not handled by mutate
+    obs_df$Team.fctr.num <- sapply(1:nrow(obs_df), 
+        function(row_ix) grep(obs_df[row_ix, "Team"],
+                              levels(obs_df[row_ix, "Team.fctr"])))
+    
+    print(summary(obs_df))
+    print(sapply(names(obs_df), function(col) sum(is.na(obs_df[, col]))))
+    return(obs_df)
+}
 
-print(summary(glb_entity_df))
+glb_entity_df <- add_new_diag_feats(glb_entity_df)
 ```
 
 ```
@@ -372,14 +365,7 @@ print(summary(glb_entity_df))
 ##  Cleveland Cavaliers: 31   Mean   :15.37  
 ##  Denver Nuggets     : 31   3rd Qu.:23.00  
 ##  Detroit Pistons    : 31   Max.   :37.00  
-##  (Other)            :649
-```
-
-```r
-print(sapply(names(glb_entity_df), function(col) sum(is.na(glb_entity_df[, col]))))
-```
-
-```
+##  (Other)            :649                  
 ##     SeasonEnd          Team      Playoffs             W           PTS 
 ##             0             0             0             0             0 
 ##        oppPTS            FG           FGA           X2P          X2PA 
@@ -393,7 +379,7 @@ print(sapply(names(glb_entity_df), function(col) sum(is.na(glb_entity_df[, col])
 ```
 
 ```r
-print(summary(glb_predct_df))
+glb_predct_df <- add_new_diag_feats(glb_predct_df)
 ```
 
 ```
@@ -437,21 +423,14 @@ print(summary(glb_predct_df))
 ##  3rd Qu.:1887   3rd Qu.:686.2   3rd Qu.:448.0   3rd Qu.:1233  
 ##  Max.   :2058   Max.   :784.0   Max.   :624.0   Max.   :1348  
 ##                                                               
-##                  Team.fctr  Team.fctr.num  
-##  Atlanta Hawks        : 1   Min.   : 1.00  
-##  Chicago Bulls        : 1   1st Qu.:10.25  
-##  Cleveland Cavaliers  : 1   Median :19.50  
-##  Denver Nuggets       : 1   Mean   :19.75  
-##  Detroit Pistons      : 1   3rd Qu.:29.25  
-##  Golden State Warriors: 1   Max.   :38.00  
-##  (Other)              :22
-```
-
-```r
-print(sapply(names(glb_predct_df), function(col) sum(is.na(glb_predct_df[, col]))))
-```
-
-```
+##                Team.fctr  Team.fctr.num  
+##  Atlanta Hawks      : 1   Min.   : 1.00  
+##  Brooklyn Nets      : 1   1st Qu.: 7.75  
+##  Charlotte Bobcats  : 1   Median :14.50  
+##  Chicago Bulls      : 1   Mean   :14.50  
+##  Cleveland Cavaliers: 1   3rd Qu.:21.25  
+##  Dallas Mavericks   : 1   Max.   :28.00  
+##  (Other)            :22                  
 ##     SeasonEnd          Team      Playoffs             W           PTS 
 ##             0             0             0             0             0 
 ##        oppPTS            FG           FGA           X2P          X2PA 
@@ -3078,56 +3057,18 @@ max_cor_y_x_var <- subset(glb_feats_df, cor.low == 1)[1, "id"]
 #   Regression:
 if (glb_is_regression) {
     #   Linear:
-
-    # Highest cor.y
-    ret_lst <- myrun_mdl_lm(indep_vars_vctr=max_cor_y_x_var,
-                            fit_df=glb_entity_df, OOB_df=glb_predct_df)
-
-    # Enhance Highest cor.y model with additions of interaction terms that were 
-    #   dropped due to high correlations
-    ret_lst <- myrun_mdl_lm(indep_vars_vctr=c(max_cor_y_x_var, 
-        paste(max_cor_y_x_var, subset(glb_feats_df, is.na(cor.low))[, "id"], sep=":")),
-                            fit_df=glb_entity_df, OOB_df=glb_predct_df)    
-
-    # Low correlated X
-    ret_lst <- myrun_mdl_lm(indep_vars_vctr=subset(glb_feats_df, cor.low == 1)[, "id"],
-                            fit_df=glb_entity_df, OOB_df=glb_predct_df)
-    glb_sel_mdl <- glb_mdl
-    
-    # All X that is not missing
-    ret_lst <- myrun_mdl_lm(indep_vars_vctr=setdiff(setdiff(names(glb_entity_df),
-                                                             glb_predct_var),
-                                                     glb_exclude_vars_as_features),
-                            fit_df=glb_entity_df, OOB_df=glb_predct_df)
-
+    myrun_mdl_fn <- myrun_mdl_lm
 }    
 
 #   Classification:
 if (glb_is_classification) {
     #   Logit Regression:
+    myrun_mdl_fn <- myrun_mdl_glm
+}    
     
-    # Highest cor.y
-    ret_lst <- myrun_mdl_glm(indep_vars_vctr=max_cor_y_x_var,
-                            fit_df=glb_entity_df, OOB_df=glb_predct_df)        
-    glb_sel_mdl <- glb_mdl
-
-    # Enhance Highest cor.y model with additions of interaction terms that were 
-    #   dropped due to high correlations
-    ret_lst <- myrun_mdl_glm(indep_vars_vctr=c(max_cor_y_x_var, 
-        paste(max_cor_y_x_var, subset(glb_feats_df, is.na(cor.low))[, "id"], sep=":")),
-                            fit_df=glb_entity_df, OOB_df=glb_predct_df)    
-
-    # Low correlated X
-    ret_lst <- myrun_mdl_glm(indep_vars_vctr=subset(glb_feats_df, cor.low == 1)[, "id"],
-                            fit_df=glb_entity_df, OOB_df=glb_predct_df)        
-    
-    # All X that is not missing
-    ret_lst <- myrun_mdl_glm(indep_vars_vctr=setdiff(setdiff(names(glb_entity_df),
-                                                             glb_predct_var),
-                                                     glb_exclude_vars_as_features),
-                            fit_df=glb_entity_df, OOB_df=glb_predct_df)
-                            
-}
+# Highest cor.y
+ret_lst <- myrun_mdl_fn(indep_vars_vctr=max_cor_y_x_var,
+                        fit_df=glb_entity_df, OOB_df=glb_predct_df)
 ```
 
 ```
@@ -3159,6 +3100,16 @@ if (glb_is_classification) {
 ## 
 ##   feats n.fit R.sq.fit  R.sq.OOB Adj.R.sq.fit  SSE.fit SSE.OOB f.score.OOB
 ## 1     W   835       NA 0.5808225           NA 16105.57       3   0.9433962
+```
+
+```r
+glb_sel_mdl <- glb_mdl
+
+# Enhance Highest cor.y model with additions of interaction terms that were 
+#   dropped due to high correlations
+ret_lst <- myrun_mdl_fn(indep_vars_vctr=c(max_cor_y_x_var, 
+    paste(max_cor_y_x_var, subset(glb_feats_df, is.na(cor.low))[, "id"], sep=":")),
+                        fit_df=glb_entity_df, OOB_df=glb_predct_df)    
 ```
 
 ```
@@ -3209,6 +3160,15 @@ if (glb_is_classification) {
 ##   n.fit R.sq.fit  R.sq.OOB Adj.R.sq.fit  SSE.fit SSE.OOB f.score.OOB
 ## 2   835       NA 0.7205483           NA 13343.56       2   0.9629630
 ## 1   835       NA 0.5808225           NA 16105.57       3   0.9433962
+```
+
+```r
+# Low correlated X
+ret_lst <- myrun_mdl_fn(indep_vars_vctr=subset(glb_feats_df, cor.low == 1)[, "id"],
+                        fit_df=glb_entity_df, OOB_df=glb_predct_df)
+```
+
+```
 ## [1] 3
 ## [1] 0.5808225
 ## 
@@ -3251,6 +3211,14 @@ if (glb_is_classification) {
 ## 2   835       NA 0.7205483           NA 13343.56       2   0.9629630
 ## 1   835       NA 0.5808225           NA 16105.57       3   0.9433962
 ## 3   835       NA 0.5808225           NA 19417.07       3   0.9433962
+```
+
+```r
+# All X that is not user excluded
+ret_lst <- myrun_mdl_fn(indep_vars_vctr=setdiff(setdiff(names(glb_entity_df),
+                                                        glb_predct_var),
+                                                glb_exclude_vars_as_features),
+                        fit_df=glb_entity_df, OOB_df=glb_predct_df)
 ```
 
 ```
@@ -3453,36 +3421,36 @@ print(glb_feats_df <- mymerge_feats_Pr.z())
 ```
 
 ```r
-for (var in subset(glb_feats_df, Pr.z < 0.1)$id) {
-    plot_df <- melt(glb_entity_df, id.vars=var, 
-                    measure.vars=c(glb_predct_var, glb_predct_var_name))
-    if (var == "W") print(myplot_scatter(plot_df, var, "value", 
-                                         facet_colcol_name="variable") + 
-                  geom_vline(xintercept=40, linetype="dotted")) else     
-        print(myplot_scatter(plot_df, var, "value", facet_colcol_name="variable"))
+# Most of this code is used again in predict_newdata chunk
+glb_analytics_diag_plots <- function(obs_df) {
+    for (var in subset(glb_feats_df, Pr.z < 0.1)$id) {
+        plot_df <- melt(obs_df, id.vars=var, 
+                        measure.vars=c(glb_predct_var, glb_predct_var_name))
+        if (var == "W") print(myplot_scatter(plot_df, var, "value", 
+                                             facet_colcol_name="variable") + 
+                      geom_vline(xintercept=40, linetype="dotted")) else     
+            print(myplot_scatter(plot_df, var, "value", facet_colcol_name="variable"))
+    }
+    
+    if (glb_is_regression) {
+        plot_vars_df <- subset(glb_feats_df, Pr.z < 0.1)
+        print(myplot_prediction_regression(obs_df, 
+                    ifelse(nrow(plot_vars_df) > 1, plot_vars_df$id[2], ".rownames"), 
+                                           plot_vars_df$id[1]))
+    }    
+    
+    if (glb_is_classification) {
+        plot_vars_df <- subset(glb_feats_df, Pr.z < 0.1)
+        print(myplot_prediction_classification(obs_df, 
+                    ifelse(nrow(plot_vars_df) > 1, plot_vars_df$id[2], ".rownames"),
+                                               plot_vars_df$id[1]) + 
+                geom_hline(yintercept=40, linetype = "dotted"))
+    }    
 }
+glb_analytics_diag_plots(glb_entity_df)
 ```
 
-![](NBA_Playoffs_files/figure-html/fit_training.all-1.png) 
-
-```r
-if (glb_is_regression) {
-    plot_vars_df <- subset(glb_feats_df, Pr.z < 0.1)
-    print(myplot_prediction_regression(glb_entity_df, 
-                ifelse(nrow(plot_vars_df) > 1, plot_vars_df$id[2], ".rownames"), 
-                                       plot_vars_df$id[1]))
-}    
-
-if (glb_is_classification) {
-    plot_vars_df <- subset(glb_feats_df, Pr.z < 0.1)
-    print(myplot_prediction_classification(glb_entity_df, 
-                ifelse(nrow(plot_vars_df) > 1, plot_vars_df$id[2], ".rownames"),
-                                           plot_vars_df$id[1]) + 
-            geom_hline(yintercept=40, linetype = "dotted"))
-}    
-```
-
-![](NBA_Playoffs_files/figure-html/fit_training.all-2.png) 
+![](NBA_Playoffs_files/figure-html/fit_training.all-1.png) ![](NBA_Playoffs_files/figure-html/fit_training.all-2.png) 
 
 ```r
 script_df <- rbind(script_df, 
@@ -3567,37 +3535,10 @@ if (glb_is_classification)
 ```
 
 ```r
-for (var in subset(glb_feats_df, Pr.z < 0.1)$id) {
-    plot_df <- melt(glb_predct_df, id.vars=var, 
-                    measure.vars=c(glb_predct_var, glb_predct_var_name))
-    if (var == "W") print(myplot_scatter(plot_df, var, "value", 
-                                         facet_colcol_name="variable") + 
-                  geom_vline(xintercept=40, linetype="dotted")) else     
-        print(myplot_scatter(plot_df, var, "value", facet_colcol_name="variable"))
-}
+glb_analytics_diag_plots(glb_predct_df)
 ```
 
-![](NBA_Playoffs_files/figure-html/predict_newdata-1.png) 
-
-```r
-# Add choose(, 2) functionality to select feature pairs to plot 
-if (glb_is_regression) {
-    plot_vars_df <- subset(glb_feats_df, Pr.z < 0.1)
-    print(myplot_prediction_regression(glb_predct_df, 
-                ifelse(nrow(plot_vars_df) > 1, plot_vars_df$id[2], ".rownames"),
-                                        plot_vars_df$id[1]))
-}    
-
-if (glb_is_classification) {
-    plot_vars_df <- subset(glb_feats_df, Pr.z < 0.1)
-    print(myplot_prediction_classification(glb_predct_df,                
-                ifelse(nrow(plot_vars_df) > 1, plot_vars_df$id[2], ".rownames"),
-                                           plot_vars_df$id[1]) + 
-            geom_hline(yintercept=40, linetype = "dotted"))
-}    
-```
-
-![](NBA_Playoffs_files/figure-html/predict_newdata-2.png) 
+![](NBA_Playoffs_files/figure-html/predict_newdata-1.png) ![](NBA_Playoffs_files/figure-html/predict_newdata-2.png) 
 
 Null Hypothesis ($\sf{H_{0}}$): mpg is not impacted by am_fctr.  
 The variance by am_fctr appears to be independent. 
